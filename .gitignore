@@ -42,3 +42,6 @@
 /thirdparty/
 /thirdparty/glog/glog-0.3.4/compile/
 /thirdparty/glog/glog-0.3.4/m4/
+
+#ignoring the personally modified files, SWQ 20200227
+.vscode/
