@@ -177,7 +177,8 @@ ExternalProject_Add(
 		DOWNLOAD_COMMAND ${JSON_DOWNLOAD_CMD}
 		BUILD_IN_SOURCE 1
 		SOURCE_DIR ${JSON_C_SRC}
-		CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --enable-static --with-pic
+		#CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --enable-static --with-pic
+		CONFIGURE_COMMAND sh autogen.sh COMMAND sh ./configure --enable-static --with-pic CFLAGS=-Wno-implicit-fallthrough
         BUILD_COMMAND make -j 8
 		INSTALL_COMMAND cp -f .libs/libjson-c.a ${LIB_PATH_STATIC}/
 )
