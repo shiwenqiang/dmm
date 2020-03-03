@@ -14,9 +14,9 @@
 # limitations under the License.
 #########################################################################
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
-PROJECT(nStack)
-SET(CMAKE_C_COMPILER "gcc")
+#CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
+#PROJECT(nStack)
+#SET(CMAKE_C_COMPILER "gcc")
 SET(OS_RELEASE "" CACHE STRING "User-specified OS release.")
 SET(EXECUTABLE_PATH ${CMAKE_CURRENT_LIST_DIR}/release/bin)
 SET(LIB_PATH_STATIC ${PROJECT_BINARY_DIR})
@@ -53,7 +53,9 @@ echo post compile process success.
 "
 )
 
+if(!DPDK)
 ADD_CUSTOM_TARGET(DPDK ALL COMMAND sh post_compile.sh)
+endif()
 
 execute_process(
     COMMAND cp -rf ${CMAKE_CURRENT_LIST_DIR}/../../release/include	${CMAKE_CURRENT_LIST_DIR}/src/
@@ -67,6 +69,7 @@ execute_process(
 
 ADD_DEFINITIONS(-D_GNU_SOURCE -DNSTACK_GETVER_VERSION="18.10")
 
+if(!JSON)
 SET(JSON_C_SRC ${CMAKE_CURRENT_LIST_DIR}/../../thirdparty/json/json-c-0.12.1)
 INCLUDE(ExternalProject)
 ExternalProject_Add(
@@ -77,10 +80,12 @@ ExternalProject_Add(
         BUILD_COMMAND make -j 8
 		INSTALL_COMMAND cp -f .libs/libjson-c.a ${LIB_PATH_STATIC}/
 )
+endif()
 
 SET(SECUREC_SRC ${CMAKE_CURRENT_LIST_DIR}/../SecureC/src)
 SET(SECUREC_SRC_H ${CMAKE_CURRENT_LIST_DIR}/../SecureC/include)
 
+if(!SECUREC)
 if(WITH_SECUREC_LIB)
 INCLUDE(ExternalProject)
 ExternalProject_Add(
@@ -92,7 +97,9 @@ ExternalProject_Add(
 		INSTALL_COMMAND cp -f ${SECUREC_SRC}/../lib/libsecurec.so ${LIB_PATH_SHARED}/
 )
 endif()
+endif()
 
+if(!GLOG)
 SET(GLOG_SRC ${CMAKE_CURRENT_LIST_DIR}/../../thirdparty/glog/glog-0.3.4)
 INCLUDE(ExternalProject)
 ExternalProject_Add(
@@ -103,7 +110,7 @@ ExternalProject_Add(
         BUILD_COMMAND COMMAND make -j 8
 		INSTALL_COMMAND cp -f ${GLOG_SRC}/.libs/libglog.a ${LIB_PATH_STATIC}/
 )
-
+endif()
 ADD_SUBDIRECTORY(src)
 ADD_SUBDIRECTORY(lwip_src)
 ADD_SUBDIRECTORY(lwip_src/socket)

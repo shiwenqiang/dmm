@@ -24,6 +24,10 @@ endif()
 INCLUDE_DIRECTORIES(
     ./
     ${PROJECT_SOURCE_DIR}/src/include/
+    ${PROJECT_SOURCE_DIR}/src/framework/include/
+    ${PROJECT_SOURCE_DIR}/src/framework/hal/
+    ${PROJECT_SOURCE_DIR}/src/framework/common/include
+    ${PROJECT_SOURCE_DIR}/src/framework/common/base/include/common
     ${PROJECT_SOURCE_DIR}/src/include/generic/
     /usr/include/dpdk/
 )

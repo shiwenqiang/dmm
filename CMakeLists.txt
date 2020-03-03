@@ -211,6 +211,6 @@ ExternalProject_Add(
 
 ADD_SUBDIRECTORY(src)
 ADD_SUBDIRECTORY(app_example)
-
-ADD_SUBDIRECTORY(stacks/rsocket)
+ADD_SUBDIRECTORY(stacks/lwip_stack)
+#ADD_SUBDIRECTORY(stacks/rsocket)
 ADD_SUBDIRECTORY(thirdparty/apps)

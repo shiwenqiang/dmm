@@ -29,7 +29,8 @@ if(WITH_HAL_LIB)
 SET(RTP_CONFIG ${CMAKE_CURRENT_LIST_DIR}/../../../src/include/rtp_config.h)
 else()
     SET(PAL_H_DIRECTORIES "/usr/include/dpdk/")
-    SET(RTP_CONFIG ${PROJECT_SOURCE_DIR}/../../src/framework/common/base/include/common/common_sys_config.h)
+    #SET(RTP_CONFIG ${PROJECT_SOURCE_DIR}/../../src/framework/common/base/include/common/common_sys_config.h)
+    SET(RTP_CONFIG ${PROJECT_SOURCE_DIR}/src/framework/common/base/include/common/common_sys_config.h)
     INCLUDE_DIRECTORIES(
         ${PAL_H_DIRECTORIES}
         ${ADAPT_DIRECTORIES}

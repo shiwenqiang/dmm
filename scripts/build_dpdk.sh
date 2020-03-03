@@ -18,7 +18,7 @@ echo OS_ID: $OS_ID
 if [ "$OS_ID" == "ubuntu" ]; then
     sudo apt-get -y install git build-essential linux-headers-`uname -r`
     sudo apt-get -y install libnuma-dev
-elif [ "$OS_ID" == "debian" ]; then
+elif [ "$OS_ID" == "debian" ] || [ "$OS_ID" == "deepin" ]; then
     sudo apt-get -y install git build-essential linux-headers-`uname -r`
 elif [ "$OS_ID" == "centos" ]; then
     sudo yum groupinstall -y "Development Tools"
@@ -35,7 +35,7 @@ if [ "$OS_ID" == "centos" ]; then
     bash -x $SCRIPT_DIR/build_dpdk1802.sh || exit 1
 else
 
-    if [ ! -d  /usr/include/dpdk ] || [ ! -d  /usr/share/dpdk ] || [ ! -d  /usr/lib/modules/4.4.0-31-generic/extra/dpdk ]; then
+    if [ ! -d  /usr/include/dpdk ] || [ ! -d  /usr/share/dpdk ] || [ ! -d  /usr/lib/modules/`uname -r`/extra/dpdk ]; then
         mkdir -p $DPDK_DOWNLOAD_PATH
 
         cd $DPDK_DOWNLOAD_PATH
@@ -59,5 +59,7 @@ else
 
         mkdir -p /tmp/dpdk/drivers/
         cp -f /usr/lib/librte_mempool_ring.so /tmp/dpdk/drivers/
+    else
+        echo "DPDK has been built"
     fi
 fi
