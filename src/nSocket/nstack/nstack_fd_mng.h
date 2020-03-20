@@ -140,7 +140,7 @@ typedef enum
 typedef struct __nstack_fd_Inf
 {
   ns_int32 rlfd;                /*the protocl stack returned fd */
-  ns_int32 rmidx;
+  ns_int32 rmidx;               /* SWQ-Reviews: 被选中的就绪module 索引号 */
   ns_int32 nxtfd;
   nstack_socket_ops *ops;       /*opers of the fd, for save space we user opIdx here */
   ns_int32 type;                /*the fd type like SOCK_STREAM|SOCK_NONBLOCK ... */
@@ -174,7 +174,7 @@ nstack_getValidInf (int fd)
 {
   nstack_fd_Inf *retInf = NULL;
   retInf = nstack_fd2inf (fd);
-  if (NULL == retInf || FD_OPEN != retInf->local_lock.fd_status)
+  if (NULL == retInf || FD_OPEN != retInf->local_lock.fd_status) //SWQ-Reviews: 内核创建的fd其状态将为FD_CLOSE!
     {
       return NULL;
     }

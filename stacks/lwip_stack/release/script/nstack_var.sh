@@ -26,7 +26,7 @@ DPDK_FILE_NAME=nstack_dpdk.log
 
 export VM_ID=agent-node-x
 
-export DPDK_INSTALL_PATH="/usr/share/dpdk/"
+export DPDK_INSTALL_PATH=/home/swq/Work/dpdk/dpdk-18.02
 export DPDK_LIB_PATH=${DPDK_INSTALL_PATH}/x86_64-native-linuxapp-gcc/lib
 export DPDK_TOOL_DIR=${DPDK_INSTALL_PATH}/usertools
 export DPDK_MOD_PATH=/usr/lib/modules/`uname -r`/extra/dpdk

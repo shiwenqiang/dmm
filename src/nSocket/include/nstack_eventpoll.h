@@ -110,11 +110,11 @@ typedef struct
 {
   int iindex;
   int iNext;
-  int fd;
+  int fd;                       //SWQ-Reviews: 申请该fd申请的epInfo
   i32 epaddflag;
   i32 fdtype;                   /*0: socket fd, 1: epoll fd */
-  i32 rlfd;                     /* copy of fdInf->rlfd */
-  i32 rmidx;                    /* copy of fdInf->rmidx */
+  i32 rlfd;                     /* copy of fdInf->rlfd *///SWQ-Reviews: 被选中的协议栈创建的fd
+  i32 rmidx;                    /* copy of fdInf->rmidx *///SWQ-Reviews: 被选中的就绪的协议module的索引
   i32 protoFD[NSEP_SMOD_MAX];   /* copy of fdInf->protoFD */// Here we need to set router infomations dependency
   struct eventpoll *ep;
   sys_sem_st epiLock;
@@ -143,9 +143,9 @@ struct epitem
   struct eventpoll *ep;
   nsep_epollInfo_t *epInfo;
   struct epitem *next;
-  struct epoll_event event;
+  struct epoll_event event;   //SWQ-Reviews: 注册时的时间及data
   struct list_node fllink;
-  unsigned int revents;
+  unsigned int revents;       //SWQ-Reviews: 就绪的事件
   unsigned int ovf_revents;
   int fd;
   u32 pid;

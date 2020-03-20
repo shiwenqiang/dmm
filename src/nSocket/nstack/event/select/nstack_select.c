@@ -89,17 +89,17 @@ select_cb_split_by_mod (i32 nfds,
             {
               continue;
             }
-          fd = select_get_modfd (i, inx);
+          fd = select_get_modfd (i, inx); // SWQ-Reviews: 注意这里i其实是app侧的comm_fd, fd为各协议模块的mod_fd
 
           /*not create by nstack */
           if ((fd < 0) || (select_get_modindex (i) < 0))
             {
-
+              /* SWQ-Reviews: 如果不是由nstack创建的fd, 且这里当前inx不是linux的index, 则忽略处理 */
               if (inx != get_mode_linux_index ())
                 {
                   continue;
                 }
-              fd = i;
+              fd = i;/* SWQ-Reviews: 即当前i对应的fd未被分配, 其fd将被绑定到linux内核的select处理  */
               nssct_create (fd, fd, inx);
             }
           else
@@ -110,7 +110,7 @@ select_cb_split_by_mod (i32 nfds,
           NSSOC_LOGDBG ("fd is  available i= %d fd = %d index = %d\n", i, fd,
                         inx);
           if ((readfd) && (FD_ISSET (i, readfd)))
-            {
+            { /* SWQ-Reviews: 这里将mod_fd设置到对应模块的协议栈事件集中 */
               NSTACK_FD_SET (fd, &(entry->cb[inx].nstack_readset));
               if (entry->cb[inx].count <= fd)
                 entry->cb[inx].count = fd + 1;
@@ -137,7 +137,7 @@ select_cb_split_by_mod (i32 nfds,
       if (entry->cb[inx].count > 0)
         {
           entry->info.set_num++;
-          entry->info.index = inx;
+          entry->info.index = inx; // SWQ-Reviews: 只记录最大的存在select事件的协议模块索引inx?
         }
     }
   return TRUE;
@@ -367,7 +367,7 @@ select_event_post (struct select_module_info *module)
               tmp->cb[inx].count = 0;
             }
           NSSOC_LOGDBG ("readyset=%d", tmp->ready.readyset);
-          select_sem_post (&tmp->sem);
+          select_sem_post (&tmp->sem); /* Reviews: 唤醒业务线程对该select调用! */
         }
     }
   select_spin_unlock (&module->lock);
@@ -452,17 +452,17 @@ entry_module_fdset (struct select_entry *entry,
 {
   i32 i;
   i32 fd;
-
+  /* SWQ-Reviews: 针对APP使用的comm_fd进行逐个事件收集到entry->ready中 */
   for (i = 0; i < fd_size; i++)
     {
-      fd = select_get_commfd (i, inx);
+      fd = select_get_commfd (i, inx); /* Reviews: 注意: 这里i代表mod_fd, fd代表comm_fd */
       if (fd < 0)
         {
           continue;
         }
       if (NSTACK_FD_ISSET (i, readfd)
           && NSTACK_FD_ISSET (i, &entry->cb[inx].nstack_readset))
-        {
+        {/* SWQ-Reviews: 这里fd为app侧使用的comm_fd */
           FD_SET (fd, &entry->ready.readset);
           entry->ready.readyset++;
           NSSOC_LOGDBG ("readyset is %d", entry->ready.readyset);
@@ -518,7 +518,7 @@ select_scan (struct select_entry *entry)
     }
   for (inx = 0; inx < get_mode_num (); inx++)
     {
-
+      /* Reviews: 注意: 这里的各协议模块下的事件集nstack_XXXset内部针对的是mod_fd! */
       *readfd = entry->cb[inx].nstack_readset;
       *writefd = entry->cb[inx].nstack_writeset;
       *exceptfd = entry->cb[inx].nstack_exceptset;
@@ -637,7 +637,7 @@ nstack_select_thread (void *arg)
 
       for (inx = 0; inx < get_mode_num (); inx++)
         {
-
+          /* SWQ-Reviews: 逐个协议模块进行select就绪事件收集 */
           fd_size =
             select_thread_get_fdset (readfd, writefd, exceptfd,
                                      &g_select_module, inx);

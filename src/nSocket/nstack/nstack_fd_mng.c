@@ -81,9 +81,9 @@ nstack_set_protoFd (nstack_fd_Inf * fdInf, int modInx, int protofd)
       NSSOC_LOGERR ("module:%d protofd invalid] protofd=%d", modInx, protofd);
       return;
     }
-
+  /* Reviews: 设置fdInf中protoFD[modInx] */
   nstack_get_protoFd (fdInf, modInx) = protofd;
-
+  /* Reviews: 设置epInf中protoFD[modInx] */
   nsep_set_infoProtoFD (fdInf->fd, modInx, protofd);
 
   nssct_create (fdInf->fd, protofd, modInx);
@@ -109,7 +109,7 @@ nstack_lk_fd_alloc_with_kernel (int nfd)
         ("nfd < 0 or nfd>= NSTACK_KERNEL_FD_MAX, parameter not valid");
       return NULL;
     }
-
+  /* SWQ-Reviews: 注意, 这里nfd是统一的由fix_mid(一般为linux_kernel)创建的fd */
   retInf = &g_nStackInfo.lk_sockPoll[nfd];
 
   if (FD_OPEN == retInf->local_lock.fd_status)
@@ -119,14 +119,19 @@ nstack_lk_fd_alloc_with_kernel (int nfd)
     }
 
   retInf->fd = nfd;
+  /* SWQ-Reviews: 分配了epInfo, 并将其赋值给manager->infoSockMap[nfd] */
   if (-1 == nsep_alloc_infoWithSock (nfd))
     {
       NSSOC_LOGERR ("Can't alloc epInfo for nfd=%d]", nfd);
       nstack_reset_fdInf (retInf);
       return NULL;
     }
-
-  nstack_set_protoFd (retInf, g_nstack_modules.fix_mid, nfd);
+  /* SWQ-Reviews: 1. 设置fdInf->protoFD[fix_mid] = nfd;
+                  2. 设置epInfo->protoFD[modInx] = nfd;
+                  3. 设置g_select_fd_map.fdinf[fd].mod_fd[inx]=mfd, g_select_fd_map.modinf[inx].comm_fd[modfd] = cfd
+                  注意:如果fd是一个epfd, 这里仍然需要给其注册到select_fd_map中,保证可以在select中对epfd的进行监听
+  */
+  nstack_set_protoFd (retInf, g_nstack_modules.fix_mid, nfd); // SWQ-Reviews: nstack_get_fix_mid()可以代替fix_mid
   NSSOC_LOGDBG ("nfd=%d,retInf_fd=%d", nfd, retInf->fd);
   return retInf;
 }
@@ -191,7 +196,7 @@ nstack_fork_init_child (pid_t ppid)
 
   int i;
   nstack_each_modInx (i)
-  {
+  { /* Reviews: 只有lwip注册了回调接口sbr_fork_init_child */
     if (nstack_extern_deal (i).fork_init_child)
       {
         nstack_extern_deal (i).fork_init_child (ppid, cpid);
@@ -221,7 +226,7 @@ nstack_fork_init_child (pid_t ppid)
                   }
               }
             }
-          else
+          else /* Reviews: 若置了CLOEXEC标志,调用fork_free_fd将无效epInfo 清除 */
             {
               nstack_reset_fd_local_lock_info (&fdInf->local_lock);
               nsep_set_infoSockMap (pos, NULL);

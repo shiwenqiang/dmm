@@ -67,7 +67,7 @@ lwip_try_select (int fdsize, fd_set * fdread, fd_set * fdwrite,
     }
 
   for (i = 0; i < fdsize; i++)
-    {
+    { /* Reviews: 这里的i指代mod_fd */
       if (!((readfd && NSTACK_FD_ISSET (i, readfd))
             || (writefd && NSTACK_FD_ISSET (i, writefd))
             || (exceptfd && NSTACK_FD_ISSET (i, exceptfd))))

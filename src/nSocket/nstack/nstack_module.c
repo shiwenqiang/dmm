@@ -271,7 +271,7 @@ nstack_stack_module_init_child ()
 {
   ns_uint32 idx;
   for (idx = 0; idx < g_module_num; idx++)
-    {
+    { /* Reviews: 只有linux协议栈时注册了回调接口kernel_module_init, 主要是创建了ep_thread线程 */
       if (g_nstack_modules.modules[idx].mops.extern_ops.module_init_child)
         {
           if (0 !=

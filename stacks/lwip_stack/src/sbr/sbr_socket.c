@@ -1260,7 +1260,7 @@ lwip_stack_register (nstack_proc_cb * ops, nstack_event_cb * val)
 #define NSTACK_MK_DECL(ret, fn, args) \
     (ops->socket_ops).pf ## fn = (typeof(((nstack_socket_ops*)0)->pf ## fn))dlsym(val->handle, "sbr_" # fn);
 #include "declare_syscalls.h"
-
+  /* SWQ-Reviews: 使用nStack层(dmm层)的接口模板,注册适配层的具体实现, 该实现又封装调用了具体协议层实现 */
   (ops->extern_ops).module_init = sbr_init_res;
   (ops->extern_ops).ep_getevt = GET_SBR_INTERCEPT (ep_getevt);
   (ops->extern_ops).ep_ctl = GET_SBR_INTERCEPT (ep_ctl);

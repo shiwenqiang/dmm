@@ -96,7 +96,7 @@ do { \
 #define SPL_IN_NONBLOCKING_CONNECT(conn) (((conn)->flags & SPL_NETCONN_FLAG_IN_NONBLOCKING_CONNECT) != 0)
 
 extern int tcpip_thread_control;
-
+/* SWQ-Reviews: 该函数主要用于协议栈回调,注册事件给epoll */
 void
 spl_event_callback (struct spl_netconn *conn, enum spl_netconn_evt evt,
                     int postFlag)
@@ -120,8 +120,8 @@ spl_event_callback (struct spl_netconn *conn, enum spl_netconn_evt evt,
         }
       break;
     case SPL_NETCONN_EVT_RCVMINUS:     // This will never be reached
-      __sync_fetch_and_sub (&conn->rcvevent, 1);
-      if ((conn->epoll_flag) && (postFlag))
+      __sync_fetch_and_sub (&conn->rcvevent, 1);//无法到达,为何要用fetch_and_sub对rcvevent减一操作?
+      if ((conn->epoll_flag) && (postFlag))     //--> 可以达到,在调用connet, listen时
         {
           nstack_event_callback (ADDR_SHTOL (conn->epInfo), EPOLLIN);
         }
@@ -1572,7 +1572,7 @@ spl_do_connected (void *arg, struct tcp_pcb *pcb, err_t err)
   SPL_SET_NONBLOCKING_CONNECT (conn, 0);
   conn->state = SPL_NETCONN_NONE;
   SPL_NETCONN_SET_SAFE_ERR (conn, ERR_OK);
-
+  //SWQ-Reviews: 在server端的accept中调用的是ss_set_send_event (sbr_get_conn (new_sk), 1);设置发送就绪
   update_tcp_state (pcb->callback_arg, ESTABLISHED);
   SPL_API_EVENT (conn, SPL_NETCONN_EVT_SENDPLUS, 1);
 
@@ -1602,11 +1602,11 @@ do_internal_tcp_connect (struct common_pcb *cpcb, struct tcp_pcb *tpcb,
         {
           if (tpcb->state != ESTABLISHED)
             {
-              SET_MSG_ERR (pmsg, ERR_ALREADY);
+              SET_MSG_ERR (pmsg, ERR_ALREADY);//SWQ-Reviews: 之前的connect动作还没结束
             }
           else
             {
-              SET_MSG_ERR (pmsg, ERR_ISCONN);
+              SET_MSG_ERR (pmsg, ERR_ISCONN);////SWQ-Reviews: connect动作已经做过了
             }
         }
       else
@@ -1622,15 +1622,15 @@ do_internal_tcp_connect (struct common_pcb *cpcb, struct tcp_pcb *tpcb,
          ip4_addr3_16 (&tpcb->local_ip), ip4_addr4_16 (&tpcb->local_ip),
          tpcb->local_port, GET_MSG_ERR (pmsg));
     }
-  else
+  else //SWQ-Reviews: 这是一个新的连接
     {
       setup_tcp (tpcb, conn);
       SET_MSG_ERR (pmsg,
                    tcp_connect (tpcb, &ip_addr, cmsg->port,
                                 tcp_fn[TCP_FN_STACKX].connected_fn));
       conn->mss = tpcb->mss;
-      SPL_API_EVENT (conn, NETCONN_EVT_SENDMINUS, 1);
-      SPL_API_EVENT (conn, NETCONN_EVT_RCVMINUS, 1);
+      SPL_API_EVENT (conn, NETCONN_EVT_SENDMINUS, 1);//SWQ-Reviews: WHY?-->归零可写事件计数;
+      SPL_API_EVENT (conn, NETCONN_EVT_RCVMINUS, 1);//SWQ-Reviews: 将可读事件计数减一是应对收到第二次握手
 
       NSTCP_LOGINF
         ("tcp_connect]pcb=%p,state=%d,remote_ip=%u.%u.%u.%u,remote_port=%u,local_ip=%u.%u.%u.%u,local_port=%u,err=%d",
@@ -1782,7 +1782,7 @@ do_listen (struct common_pcb *cpcb, msg_listen * lmsg)
                   /* connection is not closed, cannot listen */
                   SET_MSG_ERR (pmsg, ERR_VAL);;
                 }
-              else
+              else //SWQ-Reviews: 是监听端的一个正常初始状态:CLOSED
                 {
                   u8_t backlog = TCP_DEFAULT_LISTEN_BACKLOG;
 
@@ -1808,8 +1808,8 @@ do_listen (struct common_pcb *cpcb, msg_listen * lmsg)
                       tcp_arg (lpcb, conn);
                       tcp_accept (lpcb, tcp_fn[TCP_FN_STACKX].accept_fn);
 
-                      SPL_API_EVENT (conn, NETCONN_EVT_SENDMINUS, 1);
-                      SPL_API_EVENT (conn, NETCONN_EVT_RCVMINUS, 1);
+                      SPL_API_EVENT (conn, NETCONN_EVT_SENDMINUS, 1);//SWQ-Reviews: 当前是监听端不需要发事件
+                      SPL_API_EVENT (conn, NETCONN_EVT_RCVMINUS, 1);//SWQ-Reviews: 当前是监听端初始阶段,应对第一次握手
                     }
                 }
             }
@@ -2053,7 +2053,7 @@ start_write:
     err_mem:
       if ((tcp_sndbuf (tpcb) <= TCP_SNDLOWAT) ||
           (tcp_sndqueuelen (tpcb) >= TCP_SNDQUEUELOWAT))
-        {
+        { /* SWQ-Reviews: 没有发送缓冲区了 or 有缓冲区,但已入发送队列的pbuf个数太多, 都会导致不能上报写就绪事件 */
           SPL_API_EVENT (conn, NETCONN_EVT_SENDMINUS, 1);
         }
     }
@@ -2395,7 +2395,7 @@ do_close (struct common_pcb *cpcb, msg_close * cmsg)
              conn, tpcb, conn->state);
           SET_MSG_ERR (m, ERR_CONN);
         }
-      else
+      else //SWQ-Reviews: 其他关闭关闭信息
         {
           if (cmsg->shut & SPL_NETCONN_SHUT_RD)
             {
@@ -2440,7 +2440,7 @@ do_close (struct common_pcb *cpcb, msg_close * cmsg)
           if (SPL_NETCONN_SHUT_RD == cmsg->shut
               || SPL_NETCONN_SHUT_RDWR == cmsg->shut)
             {
-              SPL_API_EVENT (conn, SPL_NETCONN_EVT_RCVPLUS, 1);
+              SPL_API_EVENT (conn, SPL_NETCONN_EVT_RCVPLUS, 1);//SWQ-Reviews: 读关闭相关一定要上报读就绪事件
             }
 
           return;

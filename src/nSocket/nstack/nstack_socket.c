@@ -160,7 +160,7 @@ nstack_socket (int domain, int itype, int protocol)
   {
     protoFD[modInx] = -1;
   }
-
+  /* Reviews: 这里实际创建的是固定协议的sfd, 一般为linux 协议栈的sfd */
   /*create the fix socket first, and check it wether ok */
   NSTACK_CAL_FUN (nstack_fix_mid_ops (), socket, (domain, itype, protocol),
                   ret_fd);
@@ -203,7 +203,7 @@ nstack_socket (int domain, int itype, int protocol)
       }
   }
 
-  /* alloc nstack fd info */
+  /* alloc nstack fd info *//* Reviews: 分配fdInfo\epInfo*/
   nstack_fd_Inf *fdInf = nstack_lk_fd_alloc_with_kernel (ret_fd);
   if (NULL == fdInf)
     {
@@ -2275,7 +2275,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
         }
     }
 
-  /*check the module had regist or not */
+  /*check the module had regist or not *//* SWQ-Reviews: 如果nstack_select线程没有初始化完成,就使用系统默认select() */
   if (TRUE != NSTACK_SELECT_LINUX_CHECK ())
     {
       return nsfw_base_select (nfds, readfds, writefds, exceptfds, timeout);
@@ -2286,7 +2286,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
       || ((NULL == readfds) && (NULL == writefds) && (NULL == exceptfds)))
     {
       if ((select_module) && (select_module->default_fun))
-        {
+        {/* SWQ-Reviews: 使用默认的select,即内核版本的select */
           return select_module->default_fun (nfds, readfds, writefds,
                                              exceptfds, timeout);
         }
@@ -2296,7 +2296,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
                                    timeout);
         }
     }
-
+  /* SWQ-Reviews: 使用malloc申请内存 */
   entry = (struct select_entry *) select_alloc (sizeof (struct select_entry));
   if (NULL == entry)
     {
@@ -2339,7 +2339,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
       NSSOC_LOGERR ("select scan failed");
       goto err_return;
     }
-
+  /* Reviews: 如果已经有了就绪事件则直接返回 */
   if (entry->ready.readyset != 0)
     {
       goto scan_return;
@@ -2349,7 +2349,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
     {
       goto scan_return;
     }
-
+  /* Reviews: 当前没有就绪事件时, 则将新的entry加入到g_select_module.entry_head, 并向信号量g_select_module.sem+1, 唤醒nstack_select_thread */
   if (FALSE == select_add_cb (entry))
     {
       errno = ENOMEM;
@@ -2358,7 +2358,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
     }
 
   if (NULL == timeout)
-    {
+    { /* Reviews: 针对当前的entry->sem对其减一操作, 若*/
       select_sem_wait (&entry->sem);
     }
   else
@@ -2382,7 +2382,7 @@ nstack_select (int nfds, fd_set * readfds, fd_set * writefds,
           timeout->tv_usec = (msec % 1000) * 1000;
         }
     }
-
+  /* Reviews: 将entry从g_select_module.entry_head中删除 */
   select_rm_cb (entry);
 
 scan_return:
@@ -2422,7 +2422,7 @@ nstack_epoll_ctl (int epfd, int op, int fd, struct epoll_event *event)
 {
   int ret = ns_fail;
   struct eventpoll *ep = NULL;
-  nstack_fd_Inf *epInf;
+  nstack_fd_Inf *fdInf;
   struct epoll_event ep_event = { 0 };
   struct epitem *epi = NULL;
 
@@ -2433,15 +2433,15 @@ nstack_epoll_ctl (int epfd, int op, int fd, struct epoll_event *event)
   if (event)
     NSSOC_LOGINF ("event->data.fd=%d,event->events=%u", event->data.fd,
                   event->events);
+  /* SWQ-Reviews: 若是普通epfd(?比如是nsfw初始化完成前创建的?)将会使用系统默认接口epoll_ctl, 内部会对 fd状态为FD_CLOSE时调用系统默认接口 */
+  NSTACK_FD_LINUX_CHECK (epfd, epoll_ctl, fdInf, (epfd, op, fd, event));
 
-  NSTACK_FD_LINUX_CHECK (epfd, epoll_ctl, epInf, (epfd, op, fd, event));
-
-  nstack_fd_local_lock_info_t *epoll_local_lock = &epInf->local_lock;
-  LOCK_EPOLL (epfd, epInf, epoll_local_lock);
+  nstack_fd_local_lock_info_t *epoll_local_lock = &fdInf->local_lock;
+  LOCK_EPOLL (epfd, fdInf, epoll_local_lock);
   nstack_fd_local_lock_info_t *local_lock = get_fd_local_lock_info (fd);
-  LOCK_EPOLL_CTRL (fd, local_lock, epfd, epoll_local_lock);
-
-  if (!NSTACK_IS_FD_EPOLL_SOCKET (epInf) || fd == epfd) /* `man epoll_ctl` tells me to do this check :) */
+  LOCK_EPOLL_CTRL (fd, local_lock, epfd, epoll_local_lock); //SWQ-Reviews: 若fd为非nstack创建的(例如,调用open, dup)等,则不做处理
+  /* SWQ-Reviews: epoll_ctl man手册上注明,fd与epfd相同时, 失败返回EINVAL */
+  if (!NSTACK_IS_FD_EPOLL_SOCKET (fdInf) || fd == epfd) /* `man epoll_ctl` tells me to do this check :) */
     {
       NSSOC_LOGWAR ("epfd=%d is not a epoll fd [return]", epfd);
       errno = EINVAL;
@@ -2493,7 +2493,7 @@ nstack_epoll_ctl (int epfd, int op, int fd, struct epoll_event *event)
     {
     case EPOLL_CTL_ADD:
       if (!epi)
-        {
+        { // Reviews: man epoll_wait(2): will always report for this event EPOLLERR|EPOLLHUP
           ep_event.events |= (EPOLLERR | EPOLLHUP);     // Check `man epoll_ctl` if you don't understand , smile :)
           common_mem_rwlock_read_lock (get_fork_lock ());       /* to ensure that there is no fd to create and close when fork. added by tongshaojun t00391048 */
           ret = nsep_epctl_add (ep, fd, &ep_event);
@@ -2522,8 +2522,8 @@ nstack_epoll_ctl (int epfd, int op, int fd, struct epoll_event *event)
       break;
     case EPOLL_CTL_MOD:
       if (epi)
-        {
-          ep_event.events |= (EPOLLERR | EPOLLHUP);     // Look up ?
+        { // Reviews: man epoll_wait(2): will always report for this event EPOLLERR|EPOLLHUP
+          ep_event.events |= (EPOLLERR | EPOLLHUP);
           ret = nsep_epctl_mod (ep, nsep_get_infoBySock (fd), epi, &ep_event);
         }
       else
@@ -2571,7 +2571,7 @@ nstack_epoll_create (int size)
     }
 
   /*create a epfd */
-  if (nstack_fix_mid_ops ()->pfepoll_create)
+  if (nstack_fix_mid_ops ()->pfepoll_create) /* SWQ-Reviews: 优先使用fix_mod(通常为内核创建) 创建epfd */
     {
       epfd = nstack_fix_mid_ops ()->pfepoll_create (size);
     }
@@ -2603,7 +2603,7 @@ nstack_epoll_create (int size)
 
   nstack_fd_local_lock_info_t *lock_info = get_fd_local_lock_info (epfd);
   LOCK_FOR_EP (lock_info);
-  fdInf = nstack_lk_fd_alloc_with_kernel (epfd);
+  fdInf = nstack_lk_fd_alloc_with_kernel (epfd); //SWQ-Reviews: 申请到了epInfo及fdInfo
   if (NULL == fdInf)
     {
       NSSOC_LOGERR ("create fdInf fail [return]");
@@ -2612,7 +2612,8 @@ nstack_epoll_create (int size)
       UNLOCK_FOR_EP (lock_info);
       return -1;
     }
-
+  /* SWQ-Reviews: 从g_epollMng->epollPool中申请一个struct eventpoll* ep,
+     并初始化其pid域及用于epoll_wait的waitSem信号量, 该ep主要是供给epoll族函数使用 */
   if (nsep_alloc_eventpoll (&ep))
     {
       nsep_free_infoWithSock (epfd);
@@ -2622,8 +2623,9 @@ nstack_epoll_create (int size)
       UNLOCK_FOR_EP (lock_info);
       return -1;
     }
-
+  /* SWQ-Reviews: 这里记录的epfd只用于debugging */
   ep->epfd = epfd;
+  /* SWQ-Reviews: 从g_epollMng->infoSockMap[epfd]得到epInfo, 设置ep域及fd_type域(EPL_NSTACK_EPOL_FD) */
   nsep_set_infoEp (epfd, ep);
   NSTACK_SET_FD_EPOLL_SOCKET (fdInf);
 
@@ -2632,7 +2634,7 @@ nstack_epoll_create (int size)
   {
 
     if (modInx == nstack_get_fix_mid ())
-      {
+      {/* SWQ-Reviews: 重复处理, 上面nstack_lk_fd_alloc_with_kernel()已经做过 */
         nstack_set_protoFd (fdInf, modInx, epfd);
         continue;
       }
@@ -2644,7 +2646,7 @@ nstack_epoll_create (int size)
   }
 
   NSSOC_LOGINF ("fd=%d [return]", epfd);
-  set_fd_status_lock_fork (epfd, FD_OPEN);
+  set_fd_status_lock_fork (epfd, FD_OPEN); // SWQ-Reviews: 用于区别走内核的场景,其对应fd将得到状态为FD_CLOSE
   UNLOCK_FOR_EP (lock_info);
   return epfd;
 }
@@ -2660,7 +2662,7 @@ nstack_epoll_prewait_proc (int epfd, int *eventflag, int num)
       return;
     }
   nstack_each_modInx (modInx)
-  {
+  { //SWQ-Reviews: 只有linux协议栈注册了kernel_prewait_proc, 将普通的epfd加到g_ksInfo.epfd监听列表中,事件为EPOLLIN|EPOLLET
     if (nstack_extern_deal (modInx).ep_prewait_proc)
       {
         if (epInfo->protoFD[modInx] < 0)
@@ -2690,7 +2692,7 @@ nstack_epoll_wait (int epfd, struct epoll_event *events, int maxevents,
   int ret = 0;
 
   NSTACK_INIT_CHECK_RET (epoll_wait, epfd, events, maxevents, timeout);
-
+  // SWQ-Reviews: 这里其实是检查epfd, 防止调用点传入系统普通的fd
   NSTACK_FD_LINUX_CHECK (epfd, epoll_wait, fdInf,
                          (epfd, events, maxevents, timeout));
 
@@ -2766,7 +2768,7 @@ nstack_epoll_wait (int epfd, struct epoll_event *events, int maxevents,
         }
       else if (timeout < 0)
         {
-          ret = sem_wait (&ep->waitSem);
+          ret = sem_wait (&ep->waitSem); //SWQ-Reviews: 这里是在业务线程内!
           /* when sem_wait return -1, epoll_wait should also return sem_wait's return value and errno */
           if (ret < 0)
             {
@@ -2831,8 +2833,9 @@ nstack_fork (void)
           nstack_log_lock_release ();
           nstack_fork_init_child (parent_pid);
           (void) nstack_for_epoll_init ();
-          dmm_spinlock_lock_with_pid (nstack_get_fork_share_lock (),
+          dmm_spinlock_lock_with_pid (nstack_get_fork_share_lock (),/* Reviews: 这里面的自旋锁是个共享内存! */
                                       get_sys_pid ());
+
           nsep_fork_child_proc (parent_pid);
 
           (void) select_module_init_child ();
@@ -2841,7 +2844,7 @@ nstack_fork (void)
       else if (pid > 0)
         {
           pid_t child_pid = get_hostpid_from_file (pid);
-          nsep_fork_parent_proc (parent_pid, child_pid);
+          nsep_fork_parent_proc (parent_pid, child_pid);/* Reviews: 有fork_share_lock保护, 父进程会将未置CLOSEXEC标记的fd的标注上此进程pid*/
           common_mem_spinlock_unlock (nstack_get_fork_share_lock ());
           sys_sleep_ns (0, 10000000);   /* wait child add pid for netconn */
         }

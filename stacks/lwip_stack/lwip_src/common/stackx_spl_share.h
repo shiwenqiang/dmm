@@ -94,7 +94,7 @@ typedef struct spl_netconn
   PRIMARY_ADDR mring_handle msg_box;
   PRIMARY_ADDR mring_handle recv_ring;
   volatile u32 snd_buf;
-  volatile i32 epoll_flag;
+  volatile i32 epoll_flag;      /* SWQ-Reviews: 标识链接已经开启epoll */
   /*here using prod/cons to instead recv_avail, avoid atomic oper. */
   volatile u32_t recv_avail_prod;       /*the product of recv_avail */
   volatile u32_t recv_avail_cons;       /*the consume of recv_avail */

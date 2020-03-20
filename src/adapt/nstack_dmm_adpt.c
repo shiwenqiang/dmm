@@ -58,7 +58,7 @@ nstack_event_callback (void *pdata, int events)
   NSSOC_LOGDBG ("Got one event]fd=%d,events=%u", epInfo->fd, events);
 
   sys_arch_lock_with_pid (&epInfo->epiLock);
-  struct list_node *fdEpiHead =
+  struct list_node *fdEpiHead =     /* SWQ-Reviews: 这里epInfo应该属于socket fd, 为什么会出现链表? */
     (struct list_node *) ADDR_SHTOL (epInfo->epiList.head);
   struct list_node *node = (struct list_node *) ADDR_SHTOL (fdEpiHead->next);
   struct epitem *epi = NULL;
@@ -73,7 +73,7 @@ nstack_event_callback (void *pdata, int events)
       if (!(epi->event.events & events))
         continue;
 
-      /*event should not notice other process */
+      /*event should not notice other process *//* SWQ-Reviews: 会出现pid不一致? 考虑fork场景! */
       if ((ep->pid != get_sys_pid ()) && g_same_process)
         {
           continue;
@@ -97,7 +97,7 @@ nstack_event_callback (void *pdata, int events)
         {
           ep_hlist_add_tail (&ep->rdlist, &epi->rdllink);
           sem_post (&ep->waitSem);
-        }
+        }//SWQ-Reviews: 为何在sem_post之后才向epi->revents赋值新事件? 时序OK?-->由ep->lock锁保证竞态区的一致性
       epi->revents |= (epi->event.events & events);
     out_unlock:
       sys_sem_s_signal (&ep->lock);

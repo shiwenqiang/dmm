@@ -348,7 +348,7 @@ sbr_tcp_accept (sbr_socket_t * sk, sbr_socket_t * new_sk,
      the socket is writable. Currently, returns 0 events.
      This issue is fixed here
    */
-
+  /* SWQ-Reviews: 这里的问题场景是如果应用同时注册了IN|OUT事件, 因为新建链路总是写就绪, 必须立即返回. 这里疑似重复调用? */
   ss_set_send_event (sbr_get_conn (new_sk), 1);
 
   return new_sk->fd;

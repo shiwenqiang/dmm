@@ -59,6 +59,6 @@ lk_epollctl (int epfd, int op, int protoFd, struct epoll_event *event)
       NSSOC_LOGERR ("MEMCPY_S failed]ret=%d", retVal);
       return -1;
     }
-  ev.data.fd = protoFd;
+  ev.data.fd = protoFd; //SWQ-Reviews: 传进来的protoFD是一个epfd!
   return g_ksInfo.libcOps.pfepoll_ctl (g_ksInfo.epfd, op, protoFd, &ev);
 }

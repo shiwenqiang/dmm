@@ -1,7 +1,7 @@
 {
 "cfg_seg_socket": [
 {
-		"socket_num": 8192,
+		"socket_num":8192,
 		"arp_stale_time": 300,
 		"arp_bc_retrans_num": 5
 }

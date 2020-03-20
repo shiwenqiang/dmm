@@ -125,13 +125,14 @@ ks_ep_thread (void *arg)
               int i = 0, num = 0, ret = 0, epfd = events[loop].data.fd;
               NSTACK_CAL_FUN (&g_ksInfo.libcOps, epoll_wait,
                               (epfd, innerEvt, SK_MAX_EP_EVENT, 0), num);
-
+              /* Reviews: 注意: 这里的innerEvt保存的都是业务epfd内监控的内核创建的业务fd的就绪事件 */
               if (0 == num)
                 {
                   NSSOC_LOGWAR ("Num is zero");
                   continue;
                 }
-
+              /* SWQ-Reviews: 这里注销epfd是不是应该放在125行之前?
+                  -->epfd上有可读事件但若其监听的sfd没有就绪事件, 则不用从g_ksInfo.epfd中注销*/
               NSTACK_CAL_FUN (&g_ksInfo.libcOps, epoll_ctl,
                               (g_ksInfo.epfd, EPOLL_CTL_DEL, epfd, NULL),
                               ret);
@@ -139,14 +140,14 @@ ks_ep_thread (void *arg)
               ret = -1;
               for (i = 0; i < num; i++)
                 {
-                  ret &=
+                  ret &=  /* SWQ-Reviews: 调用各协议模块注册时设置的回调接口: nstack_event_callback, 将就绪事件填充到epInfo->epiList,并将其加到rdlist */
                     g_ksInfo.regVal.event_cb (innerEvt[i].data.ptr,
                                               innerEvt[i].events);
                   NSSOC_LOGDBG ("Kernel got one event]i=%d,ptr=%d,events=%u",
                                 i, innerEvt[i].data.ptr, innerEvt[i].events);
                 }
 
-              if (ret)
+              if (ret) /* SWQ-Reviews: 将epfd重新加入全局事件监控集中 */
                 {
                   struct epoll_event ev;
                   ev.data.fd = epfd;

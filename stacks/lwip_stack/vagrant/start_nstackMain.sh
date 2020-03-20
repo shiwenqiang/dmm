@@ -17,7 +17,8 @@
 set -x
 
 DPDK_DOWNLOAD_PATH=/tmp/dpdk
-ifname=enp0s8
+#ifname=enp0s8
+ifname=eno1
 
 if [ "x$1" != "x" ] && [ "$1" != "from-base-build" ]; then
     TEMP_DIR=$1

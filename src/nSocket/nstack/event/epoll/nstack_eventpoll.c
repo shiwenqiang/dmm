@@ -58,7 +58,7 @@ nsep_ctl_event_add (struct epitem *epi, struct eventpoll *ep,
           sys_arch_lock_with_pid (&ep->lock);
 
           if (!EP_HLIST_NODE_LINKED (&epi->rdllink))
-            {
+            { /* SWQ-Reviews: 将epi加入到epfd对应的就绪列表ep->rdlist中 */
               ep_hlist_add_tail (&ep->rdlist, &epi->rdllink);
             }
 
@@ -130,15 +130,15 @@ nsep_epctl_triggle (struct epitem *epi, nsep_epollInfo_t * info,
         {
           return;
         }
-
+      /* SWQ-Reviews: 内部触发对应协议栈的扩展接口ep_ctl = stackx_eventpoll_triggle */
       NSTACK_EP_TRIGGLE (epInfo->protoFD[info->rmidx], info->rlfd,
                          info->rmidx, triggle_ops, &(epi->event), info, ret);
-
+      //SWQ-Reviews: ep_ctl 在这里执行成功时, stackx将返回就绪的事件events, 内核将返回0;
       if ((ret >= 0)
           && ((nstack_ep_triggle_add == triggle_ops)
               || (nstack_ep_triggle_mod == triggle_ops)))
         {
-          epi->revents = ret;
+          epi->revents = ret;//SWQ-Reviews: [stackx]有就绪事件时将epi加到ep->rdlist,并将信号量sem +1操作; [kernel]不做事
           nsep_ctl_event_add (epi, ep, triggle_ops, epi->revents);
           info->epaddflag |= (1 << info->rmidx);
         }
@@ -146,7 +146,7 @@ nsep_epctl_triggle (struct epitem *epi, nsep_epollInfo_t * info,
                     info, nstack_get_module_name_by_idx (info->rmidx),
                     info->rlfd, triggle_ops, ret);
     }
-  else
+  else //SWQ-Reviews: 如果没有选中任何就绪的协议栈module,则逐个协议栈触发对应fd的事件. 此种既是fd为外部创建的open fd, 只有epinfo,没有fdInf
     {
       nstack_each_modInx (modInx)
       {
@@ -155,7 +155,7 @@ nsep_epctl_triggle (struct epitem *epi, nsep_epollInfo_t * info,
         if (protoFd < 0)
           {
             continue;
-          }
+          }/* Reviews: 这里将调用linux默认协议接口 ep_ctl = kernel_ep_fd_add 只是简单调用epoll_ctl*/
         NSTACK_EP_TRIGGLE (epInfo->protoFD[modInx], protoFd, modInx,
                            triggle_ops, &(epi->event), info, ret);
         if ((ret >= 0)
@@ -237,7 +237,7 @@ nsep_insert_node (struct eventpoll *ep, struct epoll_event *event,
 
   /* Add the current item to the list of active epoll hook for this file
      This should lock because file descriptor may be called by other eventpoll */
-
+  /* SWQ-Reviews: 有被其他eventpoll同时调用的可能么? */
   sys_arch_lock_with_pid (&fdInfo->epiLock);
   ep_list_add_tail (&fdInfo->epiList, &epi->fllink);
   epi->private_data = (void *) ADDR_LTOSH_EXT (fdInfo);
@@ -245,7 +245,7 @@ nsep_insert_node (struct eventpoll *ep, struct epoll_event *event,
 
   /* Add epitem to eventpoll fd list, don't need lock here because epoll_ctl will lock before calling this function */
   nsep_rbtree_insert (ep, epi);
-
+  /* SWQ-Reviews: 如果是stackx,则就是触发上报就绪事件, 如果是kernel, 则只是单纯的调用系统epoll_ctl操作 */
   /* Need to poll the events already stored in stack */
   nsep_epctl_triggle (epi, fdInfo, nstack_ep_triggle_add);
 
@@ -272,9 +272,9 @@ nsep_epctl_add (struct eventpoll *ep, int fd, struct epoll_event *events)
   int ret = 0;
 
   NSSOC_LOGINF ("epfd=%d,fd=%d,events=%u", ep->epfd, fd, events->events);
-
+  /* SWQ-Reviews: 注意这里获取的是socket fd的epInfo */
   nsep_epollInfo_t *fdInfo = nsep_get_infoBySock (fd);
-
+  /* Reviews: 场景: fd是由open创建的,没有fdInf, 此时只需要申请epinfo */
   if (NULL == fdInfo)
     {
       if (0 == nsep_isAddValid (fd))
@@ -288,7 +288,7 @@ nsep_epctl_add (struct eventpoll *ep, int fd, struct epoll_event *events)
           return -1;
         }
       nsep_set_infoProtoFD (fd, nstack_get_fix_mid (), fd);
-      fdInfo = nsep_get_infoBySock (fd);
+      fdInfo = nsep_get_infoBySock (fd);/* Reviews: fd标识业务的sfd */
     }
 
   ret = nsep_insert_node (ep, events, fdInfo);
@@ -343,7 +343,7 @@ nsep_epctl_mod (struct eventpoll *ep,
   sys_arch_lock_with_pid (&ep->lock);
   epi->event = *events;         /* kernel tells me that I need to modify epi->event in lock context */
   sys_sem_s_signal (&ep->lock);
-
+  /* Reviews: 注意这里epInfo其实是sfd_epInfo*/
   nsep_epctl_triggle (epi, epInfo, nstack_ep_triggle_mod);
   return 0;
 }
@@ -374,14 +374,14 @@ nsep_events_proc (struct eventpoll *ep,
         (nsep_epollInfo_t *) ADDR_SHTOL (epi->private_data);
 
       if (fdInfo->rmidx != -1)
-        {
+        {/* SWQ-Reviews: 如果没有注册extern_ops->ep_getevt,则不做任何事. 如果注册了, 则再补录一次事件: stackx_eventpoll_getEvt*/
           nstack_ep_getEvt (ep->epfd, fdInfo->rlfd, fdInfo->rmidx,
                             epi->event.events, (epi->revents));
         }
 
       if (epi->revents)
         {
-          /*set the flag that already have event int the rdlist */
+          /*set the flag that already have event in the rdlist */
           if (eventflag && (fdInfo->rmidx >= 0) && (fdInfo->rmidx < num))
             {
               eventflag[fdInfo->rmidx] = 1;
@@ -392,7 +392,7 @@ nsep_events_proc (struct eventpoll *ep,
                         epi->fd, events[evt].events);
           evt++;
         }
-
+      /* SWQ-Reviews: 如果有就绪事件, 且当前是LT模式,则将该epi再次添加进ep->rdlist, 下一次wait时从rdlist继续检查是否有就绪事件*/
       if (0 != epi->revents && EPOLLET != (epi->event.events & EPOLLET))
         {
           NSSOC_LOGDBG ("Add epi->rdllink,epfd=%d,fd=%d", ep->epfd, epi->fd);
@@ -440,7 +440,7 @@ nsep_ep_poll (struct eventpoll *ep, struct epoll_event *events, int maxevents,
     {
       goto out;
     }
-
+  /* SWQ-Reviews: 摘空就绪列表 */
   sys_arch_lock_with_pid (&ep->lock);
   head = (struct ep_hlist_node *) ADDR_SHTOL (ep->rdlist.head);
   if (!head)
@@ -455,11 +455,11 @@ nsep_ep_poll (struct eventpoll *ep, struct epoll_event *events, int maxevents,
   ep->ovflist = NULL;
   sys_sem_s_signal (&ep->lock);
 
-  /*get event list */
+  /*get event list */ //SWQ-Reviews: 由上面的ep->lock保证 与nstack_event_callback()内对epi->revents的一致性
   evt = nsep_events_proc (ep, &nhead, events, maxevents, eventflag, num);
 
   sys_arch_lock_with_pid (&ep->lock);
-  /*put rest epitem back to the rdlist */
+  /*put rest epitem back to the rdlist *//* SWQ-Reviews: 将剩下没处理完的epi重新加到ep->rdlist */
   if (nhead.head)
     {
       tail = (struct ep_hlist_node *) ADDR_SHTOL (ep->rdlist.tail);
@@ -819,7 +819,7 @@ nsep_alloc_infoWithSock (int nfd)
     {
       return -1;
     }
-
+  /* SWQ-Reviews: 申请的epInfo已经包含pid信息 */
   if (-1 == nsep_alloc_epinfo (&epInfo))
     {
       NSSOC_LOGERR ("Alloc share info fail,[return]");
@@ -834,7 +834,7 @@ nsep_alloc_infoWithSock (int nfd)
 }
 
 void
-nsep_set_infoProtoFD (int fd, int modInx, int protoFD)
+znsep_set_infoProtoFD (int fd, int modInx, int protoFD)
 {
   nsep_epollInfo_t *epInfo = nsep_get_infoBySock (fd);
 
@@ -1135,7 +1135,7 @@ nsep_fork_parent_proc (u32_t ppid, u32_t cpid)
         {
           fdInf = nstack_getValidInf (pos);
           if (fdInf)
-            {
+            { /* Reviews: fdInfo不用清除么--> 当前是父进程! */
               if (((u32_t) (fdInf->type)) & SOCK_CLOEXEC)
                 {
                   NSSOC_LOGINF ("fd is SOCK_CLOEXEC]fd=%d,ppid=%d.cpid=%d",
@@ -1173,12 +1173,12 @@ nsep_fork_child_proc (u32_t ppid)
   nsep_epollInfo_t *epinfo = NULL;
   int pos;
   for (pos = 0; (u32_t) pos < NSTACK_KERNEL_FD_MAX; pos++)
-    {
-      epinfo = manager->infoSockMap[pos];
+    { /* Reviews: epinfo本身是共享内存,fork后再被映射到子进程地址空间,而g_epollMng->infoSockMap为父进程malloc的指针数组*/
+      epinfo = manager->infoSockMap[pos];/* Reviews: pos是代表comm_fd */
       if (epinfo)
         {
           if (!nsep_is_pid_exist (&epinfo->pidinfo, cpid))
-            {
+            { /* Reviews: 如果当前子进程pid不在epinfo->pidinfo->pidarray中, 则将其清空 */
               NSSOC_LOGINF
                 ("unuse epinfo,happen in SOCK_CLOEXEC,!FD_OPEN,parent coredump]fd=%d,epinfo=%p,ppid=%d,cpid=%d",
                  pos, epinfo, ppid, cpid);
